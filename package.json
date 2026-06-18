@@ -1,0 +1,24 @@
+{
+  "name": "458",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Octobersunshine/record13-458.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Octobersunshine/record13-458/issues"
+  },
+  "homepage": "https://github.com/Octobersunshine/record13-458#readme",
+  "dependencies": {
+    "amqplib": "^2.0.1",
+    "express": "^5.2.1"
+  }
+}
