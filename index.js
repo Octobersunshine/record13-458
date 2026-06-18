@@ -100,6 +100,50 @@ async function sendMessageWithRetry(targetQueue, payload) {
   return { success: false, error: lastError.message };
 }
 
+async function sendBatchMessages(items, defaultQueue) {
+  const results = [];
+  let sentCount = 0;
+  let failedCount = 0;
+
+  for (const [index, item] of items.entries()) {
+    const targetQueue = item.queue || defaultQueue;
+    const payload = { message: item.message, timestamp: new Date().toISOString() };
+
+    const result = await sendMessageWithRetry(targetQueue, payload);
+
+    if (result.success) {
+      sentCount++;
+      results.push({ index, success: true, queue: targetQueue, message: item.message });
+    } else {
+      failedCount++;
+      const failedEntry = {
+        queue: targetQueue,
+        payload,
+        error: result.error,
+        failedAt: new Date().toISOString(),
+        retriesAttempted: MAX_RETRIES,
+      };
+
+      try {
+        persistFailedMessage(failedEntry);
+      } catch (logErr) {
+        console.error("Failed to persist failed message log:", logErr.message);
+      }
+
+      results.push({
+        index,
+        success: false,
+        queue: targetQueue,
+        message: item.message,
+        error: result.error,
+        persisted: true,
+      });
+    }
+  }
+
+  return { total: items.length, sent: sentCount, failed: failedCount, results };
+}
+
 app.post("/send", async (req, res) => {
   const { message, queue } = req.body;
 
@@ -135,6 +179,35 @@ app.post("/send", async (req, res) => {
     detail: result.error,
     persisted: true,
   });
+});
+
+app.post("/send/batch", async (req, res) => {
+  const { messages, queue } = req.body;
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "messages must be a non-empty array" });
+  }
+
+  const invalidItems = messages.filter((m, idx) => {
+    if (!m || typeof m !== "object") return true;
+    if (typeof m.message !== "string" || m.message.length === 0) return true;
+    return false;
+  });
+
+  if (invalidItems.length > 0) {
+    return res.status(400).json({
+      error: "Each item in messages must be an object with a non-empty string 'message' field",
+    });
+  }
+
+  const defaultQueue = queue || QUEUE_NAME;
+  const batchResult = await sendBatchMessages(messages, defaultQueue);
+
+  if (batchResult.failed === 0) {
+    return res.json({ ...batchResult, allSucceeded: true });
+  }
+
+  res.status(207).json({ ...batchResult, allSucceeded: false });
 });
 
 connectRabbitMQ()
